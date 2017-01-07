@@ -226,6 +226,9 @@ class TestWarns(object):
         assert len(record) == 1
         assert str(record[0].message) == "user"
 
+        print(repr(record[0]))
+        assert str(record[0].message) in repr(record[0])
+
     def test_record_only(self):
         with pytest.warns(None) as record:
             warnings.warn("user", UserWarning)
@@ -234,6 +237,28 @@ class TestWarns(object):
         assert len(record) == 2
         assert str(record[0].message) == "user"
         assert str(record[1].message) == "runtime"
+
+    def test_record_by_subclass(self):
+        with pytest.warns(Warning) as record:
+            warnings.warn("user", UserWarning)
+            warnings.warn("runtime", RuntimeWarning)
+
+        assert len(record) == 2
+        assert str(record[0].message) == "user"
+        assert str(record[1].message) == "runtime"
+
+        class MyUserWarning(UserWarning): pass
+
+        class MyRuntimeWarning(RuntimeWarning): pass
+
+        with pytest.warns((UserWarning, RuntimeWarning)) as record:
+            warnings.warn("user", MyUserWarning)
+            warnings.warn("runtime", MyRuntimeWarning)
+
+        assert len(record) == 2
+        assert str(record[0].message) == "user"
+        assert str(record[1].message) == "runtime"
+
 
     def test_double_test(self, testdir):
         """If a test is run again, the warning should still be raised"""

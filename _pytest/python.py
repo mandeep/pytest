@@ -404,8 +404,9 @@ def transfer_markers(funcobj, cls, mod):
 
 class Module(pytest.File, PyCollector):
     """ Collector for test classes and functions. """
+
     def _getobj(self):
-        return self._memoizedcall('_obj', self._importtestmodule)
+        return self._importtestmodule()
 
     def collect(self):
         self.session._fixturemanager.parsefactories(self)
@@ -502,6 +503,8 @@ def _get_xunit_func(obj, name):
 class Class(PyCollector):
     """ Collector for test methods. """
     def collect(self):
+        if not safe_getattr(self.obj, "__test__", True):
+            return []
         if hasinit(self.obj):
             self.warn("C1", "cannot collect test class %r because it has a "
                 "__init__ constructor" % self.obj.__name__)
@@ -925,12 +928,17 @@ def _find_parametrized_scope(argnames, arg2fixturedefs, indirect):
 
 def _idval(val, argname, idx, idfn, config=None):
     if idfn:
+        s = None
         try:
             s = idfn(val)
-            if s:
-                return _escape_strings(s)
         except Exception:
-            pass
+            # See issue https://github.com/pytest-dev/pytest/issues/2169
+            import warnings
+            msg = "Raised while trying to determine id of parameter %s at position %d." % (argname, idx)
+            msg += '\nUpdate your code as this will raise an error in pytest-4.0.'
+            warnings.warn(msg)
+        if s:
+            return _escape_strings(s)
 
     if config:
         hook_id = config.hook.pytest_make_parametrize_id(config=config, val=val)
@@ -1175,12 +1183,6 @@ def raises(expected_exception, *args, **kwargs):
 
     """
     __tracebackhide__ = True
-    if expected_exception is AssertionError:
-        # we want to catch a AssertionError
-        # replace our subclass with the builtin one
-        # see https://github.com/pytest-dev/pytest/issues/176
-        from _pytest.assertion.util import BuiltinAssertionError \
-            as expected_exception
     msg = ("exceptions must be old-style classes or"
            " derived from BaseException, not %s")
     if isinstance(expected_exception, tuple):
