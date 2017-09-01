@@ -1,4 +1,6 @@
 """ core implementation of testing process: init, session, runtest loop. """
+from __future__ import absolute_import, division, print_function
+
 import functools
 import os
 import sys
@@ -6,14 +8,14 @@ import sys
 import _pytest
 import _pytest._code
 import py
-import pytest
 try:
     from collections import MutableMapping as MappingMixin
 except ImportError:
     from UserDict import DictMixin as MappingMixin
 
-from _pytest.config import directory_arg
+from _pytest.config import directory_arg, UsageError, hookimpl
 from _pytest.runner import collect_one_node
+from _pytest.outcomes import exit
 
 tracebackcutdir = py.path.local(_pytest.__file__).dirpath()
 
@@ -25,63 +27,73 @@ EXIT_INTERNALERROR = 3
 EXIT_USAGEERROR = 4
 EXIT_NOTESTSCOLLECTED = 5
 
+
 def pytest_addoption(parser):
     parser.addini("norecursedirs", "directory patterns to avoid for recursion",
-        type="args", default=['.*', 'build', 'dist', 'CVS', '_darcs', '{arch}', '*.egg'])
-    parser.addini("testpaths", "directories to search for tests when no files or directories are given in the command line.",
-        type="args", default=[])
-    #parser.addini("dirpatterns",
+                  type="args", default=['.*', 'build', 'dist', 'CVS', '_darcs', '{arch}', '*.egg', 'venv'])
+    parser.addini("testpaths", "directories to search for tests when no files or directories are given in the "
+                               "command line.",
+                  type="args", default=[])
+    # parser.addini("dirpatterns",
     #    "patterns specifying possible locations of test files",
     #    type="linelist", default=["**/test_*.txt",
     #            "**/test_*.py", "**/*_test.py"]
-    #)
+    # )
     group = parser.getgroup("general", "running and selection options")
     group._addoption('-x', '--exitfirst', action="store_const",
-               dest="maxfail", const=1,
-               help="exit instantly on first error or failed test."),
+                     dest="maxfail", const=1,
+                     help="exit instantly on first error or failed test."),
     group._addoption('--maxfail', metavar="num",
-               action="store", type=int, dest="maxfail", default=0,
-               help="exit after first num failures or errors.")
+                     action="store", type=int, dest="maxfail", default=0,
+                     help="exit after first num failures or errors.")
     group._addoption('--strict', action="store_true",
-               help="run pytest in strict mode, warnings become errors.")
+                     help="marks not registered in configuration file raise errors.")
     group._addoption("-c", metavar="file", type=str, dest="inifilename",
-               help="load configuration from `file` instead of trying to locate one of the implicit configuration files.")
+                     help="load configuration from `file` instead of trying to locate one of the implicit "
+                          "configuration files.")
     group._addoption("--continue-on-collection-errors", action="store_true",
-               default=False, dest="continue_on_collection_errors",
-               help="Force test execution even if collection errors occur.")
+                     default=False, dest="continue_on_collection_errors",
+                     help="Force test execution even if collection errors occur.")
 
     group = parser.getgroup("collect", "collection")
     group.addoption('--collectonly', '--collect-only', action="store_true",
-        help="only collect tests, don't execute them."),
+                    help="only collect tests, don't execute them."),
     group.addoption('--pyargs', action="store_true",
-        help="try to interpret all arguments as python packages.")
+                    help="try to interpret all arguments as python packages.")
     group.addoption("--ignore", action="append", metavar="path",
-        help="ignore path during collection (multi-allowed).")
+                    help="ignore path during collection (multi-allowed).")
     # when changing this to --conf-cut-dir, config.py Conftest.setinitial
     # needs upgrading as well
     group.addoption('--confcutdir', dest="confcutdir", default=None,
-        metavar="dir", type=functools.partial(directory_arg, optname="--confcutdir"),
-        help="only load conftest.py's relative to specified dir.")
+                    metavar="dir", type=functools.partial(directory_arg, optname="--confcutdir"),
+                    help="only load conftest.py's relative to specified dir.")
     group.addoption('--noconftest', action="store_true",
-        dest="noconftest", default=False,
-        help="Don't load any conftest.py files.")
+                    dest="noconftest", default=False,
+                    help="Don't load any conftest.py files.")
     group.addoption('--keepduplicates', '--keep-duplicates', action="store_true",
-        dest="keepduplicates", default=False,
-        help="Keep duplicate tests.")
+                    dest="keepduplicates", default=False,
+                    help="Keep duplicate tests.")
+    group.addoption('--collect-in-virtualenv', action='store_true',
+                    dest='collect_in_virtualenv', default=False,
+                    help="Don't ignore tests in a local virtualenv directory")
 
     group = parser.getgroup("debugconfig",
-        "test session debugging and configuration")
+                            "test session debugging and configuration")
     group.addoption('--basetemp', dest="basetemp", default=None, metavar="dir",
-               help="base temporary directory for this test run.")
+                    help="base temporary directory for this test run.")
 
 
 def pytest_namespace():
-    collect = dict(Item=Item, Collector=Collector, File=File, Session=Session)
-    return dict(collect=collect)
+    """keeping this one works around a deeper startup issue in pytest
+
+    i tried to find it for a while but the amount of time turned unsustainable,
+    so i put a hack in to revisit later
+    """
+    return {}
 
 
 def pytest_configure(config):
-    pytest.config = config # compatibiltiy
+    __import__('pytest').config = config  # compatibiltiy
 
 
 def wrap_session(config, doit):
@@ -96,12 +108,11 @@ def wrap_session(config, doit):
             config.hook.pytest_sessionstart(session=session)
             initstate = 2
             session.exitstatus = doit(config, session) or 0
-        except pytest.UsageError:
+        except UsageError:
             raise
         except KeyboardInterrupt:
             excinfo = _pytest._code.ExceptionInfo()
-            if initstate < 2 and isinstance(
-                    excinfo.value, pytest.exit.Exception):
+            if initstate < 2 and isinstance(excinfo.value, exit.Exception):
                 sys.stderr.write('{0}: {1}\n'.format(
                     excinfo.typename, excinfo.value.msg))
             config.hook.pytest_keyboard_interrupt(excinfo=excinfo)
@@ -123,8 +134,10 @@ def wrap_session(config, doit):
         config._ensure_unconfigure()
     return session.exitstatus
 
+
 def pytest_cmdline_main(config):
     return wrap_session(config, _main)
+
 
 def _main(config, session):
     """ default command line protocol for initialization, session,
@@ -137,8 +150,10 @@ def _main(config, session):
     elif session.testscollected == 0:
         return EXIT_NOTESTSCOLLECTED
 
+
 def pytest_collection(session):
     return session.perform_collect()
+
 
 def pytest_runtestloop(session):
     if (session.testsfailed and
@@ -150,21 +165,36 @@ def pytest_runtestloop(session):
         return True
 
     for i, item in enumerate(session.items):
-        nextitem = session.items[i+1] if i+1 < len(session.items) else None
+        nextitem = session.items[i + 1] if i + 1 < len(session.items) else None
         item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
         if session.shouldstop:
             raise session.Interrupted(session.shouldstop)
     return True
 
+
+def _in_venv(path):
+    """Attempts to detect if ``path`` is the root of a Virtual Environment by
+    checking for the existence of the appropriate activate script"""
+    bindir = path.join('Scripts' if sys.platform.startswith('win') else 'bin')
+    if not bindir.exists():
+        return False
+    activates = ('activate', 'activate.csh', 'activate.fish',
+                 'Activate', 'Activate.bat', 'Activate.ps1')
+    return any([fname.basename in activates for fname in bindir.listdir()])
+
+
 def pytest_ignore_collect(path, config):
-    p = path.dirpath()
-    ignore_paths = config._getconftest_pathlist("collect_ignore", path=p)
+    ignore_paths = config._getconftest_pathlist("collect_ignore", path=path.dirpath())
     ignore_paths = ignore_paths or []
     excludeopt = config.getoption("ignore")
     if excludeopt:
         ignore_paths.extend([py.path.local(x) for x in excludeopt])
 
-    if path in ignore_paths:
+    if py.path.local(path) in ignore_paths:
+        return True
+
+    allow_in_venv = config.getoption("collect_in_virtualenv")
+    if _in_venv(path) and not allow_in_venv:
         return True
 
     # Skip duplicate paths.
@@ -190,14 +220,22 @@ class FSHookProxy:
         self.__dict__[name] = x
         return x
 
-def compatproperty(name):
-    def fget(self):
-        import warnings
-        warnings.warn("This usage is deprecated, please use pytest.{0} instead".format(name),
-                      PendingDeprecationWarning, stacklevel=2)
-        return getattr(pytest, name)
 
-    return property(fget)
+class _CompatProperty(object):
+    def __init__(self, name):
+        self.name = name
+
+    def __get__(self, obj, owner):
+        if obj is None:
+            return self
+
+        # TODO: reenable in the features branch
+        # warnings.warn(
+        #     "usage of {owner!r}.{name} is deprecated, please use pytest.{name} instead".format(
+        #         name=self.name, owner=type(owner).__name__),
+        #     PendingDeprecationWarning, stacklevel=2)
+        return getattr(__import__('pytest'), self.name)
+
 
 class NodeKeywords(MappingMixin):
     def __init__(self, node):
@@ -269,24 +307,28 @@ class Node(object):
         """ fspath sensitive hook proxy used to call pytest hooks"""
         return self.session.gethookproxy(self.fspath)
 
-    Module = compatproperty("Module")
-    Class = compatproperty("Class")
-    Instance = compatproperty("Instance")
-    Function = compatproperty("Function")
-    File = compatproperty("File")
-    Item = compatproperty("Item")
+    Module = _CompatProperty("Module")
+    Class = _CompatProperty("Class")
+    Instance = _CompatProperty("Instance")
+    Function = _CompatProperty("Function")
+    File = _CompatProperty("File")
+    Item = _CompatProperty("Item")
 
     def _getcustomclass(self, name):
-        cls = getattr(self, name)
-        if cls != getattr(pytest, name):
-            py.log._apiwarn("2.0", "use of node.%s is deprecated, "
-                "use pytest_pycollect_makeitem(...) to create custom "
-                "collection nodes" % name)
+        maybe_compatprop = getattr(type(self), name)
+        if isinstance(maybe_compatprop, _CompatProperty):
+            return getattr(__import__('pytest'), name)
+        else:
+            cls = getattr(self, name)
+            # TODO: reenable in the features branch
+            # warnings.warn("use of node.%s is deprecated, "
+            #    "use pytest_pycollect_makeitem(...) to create custom "
+            #    "collection nodes" % name, category=DeprecationWarning)
         return cls
 
     def __repr__(self):
-        return "<%s %r>" %(self.__class__.__name__,
-                           getattr(self, 'name', None))
+        return "<%s %r>" % (self.__class__.__name__,
+                            getattr(self, 'name', None))
 
     def warn(self, code, message):
         """ generate a warning with the given code and message for this
@@ -295,9 +337,6 @@ class Node(object):
         fslocation = getattr(self, "location", None)
         if fslocation is None:
             fslocation = getattr(self, "fspath", None)
-        else:
-            fslocation = "%s:%s" % (fslocation[0], fslocation[1] + 1)
-
         self.ihook.pytest_logwarning.call_historic(kwargs=dict(
             code=code, message=message,
             nodeid=self.nodeid, fslocation=fslocation))
@@ -358,9 +397,9 @@ class Node(object):
 
         ``marker`` can be a string or pytest.mark.* instance.
         """
-        from _pytest.mark import MarkDecorator
+        from _pytest.mark import MarkDecorator, MARK_GEN
         if isinstance(marker, py.builtin._basestring):
-            marker = getattr(pytest.mark, marker)
+            marker = getattr(MARK_GEN, marker)
         elif not isinstance(marker, MarkDecorator):
             raise ValueError("is not a string or pytest.mark.* Marker")
         self.keywords[marker.name] = marker
@@ -410,7 +449,7 @@ class Node(object):
             return excinfo.value.formatrepr()
         tbfilter = True
         if self.config.option.fulltrace:
-            style="long"
+            style = "long"
         else:
             tb = _pytest._code.Traceback([excinfo.traceback[-1]])
             self._prunetraceback(excinfo)
@@ -437,6 +476,7 @@ class Node(object):
                                style=style, tbfilter=tbfilter)
 
     repr_failure = _repr_failure_py
+
 
 class Collector(Node):
     """ Collector instances create children through collect()
@@ -467,9 +507,10 @@ class Collector(Node):
                 ntraceback = ntraceback.cut(excludepath=tracebackcutdir)
             excinfo.traceback = ntraceback.filter()
 
+
 class FSCollector(Collector):
     def __init__(self, fspath, parent=None, config=None, session=None):
-        fspath = py.path.local(fspath) # xxx only for test_resultlog.py?
+        fspath = py.path.local(fspath)  # xxx only for test_resultlog.py?
         name = fspath.basename
         if parent is not None:
             rel = fspath.relto(parent.fspath)
@@ -485,8 +526,10 @@ class FSCollector(Collector):
             relpath = relpath.replace(os.sep, "/")
         return relpath
 
+
 class File(FSCollector):
     """ base class for collecting tests from a file. """
+
 
 class Item(Node):
     """ a basic test invocation item. Note that for a single function
@@ -499,6 +542,21 @@ class Item(Node):
         self._report_sections = []
 
     def add_report_section(self, when, key, content):
+        """
+        Adds a new report section, similar to what's done internally to add stdout and
+        stderr captured output::
+
+            item.add_report_section("call", "stdout", "report section contents")
+
+        :param str when:
+            One of the possible capture states, ``"setup"``, ``"call"``, ``"teardown"``.
+        :param str key:
+            Name of the section, can be customized at will. Pytest uses ``"stdout"`` and
+            ``"stderr"`` internally.
+
+        :param str content:
+            The full contents as a string.
+        """
         if content:
             self._report_sections.append((when, key, content))
 
@@ -522,12 +580,15 @@ class Item(Node):
             self._location = location
             return location
 
+
 class NoMatch(Exception):
     """ raised if matching cannot locate a matching names. """
 
+
 class Interrupted(KeyboardInterrupt):
     """ signals an interrupted test run. """
-    __module__ = 'builtins' # for py3
+    __module__ = 'builtins'  # for py3
+
 
 class Session(FSCollector):
     Interrupted = Interrupted
@@ -546,12 +607,12 @@ class Session(FSCollector):
     def _makeid(self):
         return ""
 
-    @pytest.hookimpl(tryfirst=True)
+    @hookimpl(tryfirst=True)
     def pytest_collectstart(self):
         if self.shouldstop:
             raise self.Interrupted(self.shouldstop)
 
-    @pytest.hookimpl(tryfirst=True)
+    @hookimpl(tryfirst=True)
     def pytest_runtest_logreport(self, report):
         if report.failed and not hasattr(report, 'wasxfail'):
             self.testsfailed += 1
@@ -582,8 +643,9 @@ class Session(FSCollector):
         hook = self.config.hook
         try:
             items = self._perform_collect(args, genitems)
+            self.config.pluginmanager.check_pending()
             hook.pytest_collection_modifyitems(session=self,
-                config=self.config, items=items)
+                                               config=self.config, items=items)
         finally:
             hook.pytest_collection_finish(session=self)
         self.testscollected = len(items)
@@ -610,8 +672,8 @@ class Session(FSCollector):
             for arg, exc in self._notfound:
                 line = "(no name %r in any of %r)" % (arg, exc.args[0])
                 errors.append("not found: %s\n%s" % (arg, line))
-                #XXX: test this
-            raise pytest.UsageError(*errors)
+                # XXX: test this
+            raise UsageError(*errors)
         if not genitems:
             return rep.result
         else:
@@ -639,7 +701,7 @@ class Session(FSCollector):
         names = self._parsearg(arg)
         path = names.pop(0)
         if path.check(dir=1):
-            assert not names, "invalid arg %r" %(arg,)
+            assert not names, "invalid arg %r" % (arg,)
             for path in path.visit(fil=lambda x: x.check(file=1),
                                    rec=self._recurse, bf=True, sort=True):
                 for x in self._collectfile(path):
@@ -698,9 +760,11 @@ class Session(FSCollector):
         path = self.config.invocation_dir.join(relpath, abs=True)
         if not path.check():
             if self.config.option.pyargs:
-                raise pytest.UsageError("file or package not found: " + arg + " (missing __init__.py?)")
+                raise UsageError(
+                    "file or package not found: " + arg +
+                    " (missing __init__.py?)")
             else:
-                raise pytest.UsageError("file not found: " + arg)
+                raise UsageError("file not found: " + arg)
         parts[0] = path
         return parts
 
@@ -723,11 +787,11 @@ class Session(FSCollector):
         nextnames = names[1:]
         resultnodes = []
         for node in matching:
-            if isinstance(node, pytest.Item):
+            if isinstance(node, Item):
                 if not names:
                     resultnodes.append(node)
                 continue
-            assert isinstance(node, pytest.Collector)
+            assert isinstance(node, Collector)
             rep = collect_one_node(node)
             if rep.passed:
                 has_matched = False
@@ -740,16 +804,20 @@ class Session(FSCollector):
                 if not has_matched and len(rep.result) == 1 and x.name == "()":
                     nextnames.insert(0, name)
                     resultnodes.extend(self.matchnodes([x], nextnames))
-            node.ihook.pytest_collectreport(report=rep)
+            else:
+                # report collection failures here to avoid failing to run some test
+                # specified in the command line because the module could not be
+                # imported (#134)
+                node.ihook.pytest_collectreport(report=rep)
         return resultnodes
 
     def genitems(self, node):
         self.trace("genitems", node)
-        if isinstance(node, pytest.Item):
+        if isinstance(node, Item):
             node.ihook.pytest_itemcollected(item=node)
             yield node
         else:
-            assert isinstance(node, pytest.Collector)
+            assert isinstance(node, Collector)
             rep = collect_one_node(node)
             if rep.passed:
                 for subnode in rep.result:

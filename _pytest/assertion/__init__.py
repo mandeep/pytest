@@ -1,6 +1,7 @@
 """
 support for presenting detailed information in failing assertions.
 """
+from __future__ import absolute_import, division, print_function
 import py
 import sys
 
@@ -22,10 +23,6 @@ def pytest_addoption(parser):
                             (the default) rewrites assert statements in
                             test modules on import to provide assert
                             expression information.""")
-
-
-def pytest_namespace():
-    return {'register_assert_rewrite': register_assert_rewrite}
 
 
 def register_assert_rewrite(*names):

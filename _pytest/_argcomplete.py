@@ -57,19 +57,21 @@ If things do not work right away:
   which should throw a KeyError: 'COMPLINE' (which is properly set by the
   global argcomplete script).
 """
-
+from __future__ import absolute_import, division, print_function
 import sys
 import os
 from glob import glob
 
+
 class FastFilesCompleter:
     'Fast file completer class'
+
     def __init__(self, directories=True):
         self.directories = directories
 
     def __call__(self, prefix, **kwargs):
         """only called on non option completions"""
-        if os.path.sep in prefix[1:]: #
+        if os.path.sep in prefix[1:]:
             prefix_dir = len(os.path.dirname(prefix) + os.path.sep)
         else:
             prefix_dir = 0
@@ -98,5 +100,6 @@ if os.environ.get('_ARGCOMPLETE'):
     def try_argcomplete(parser):
         argcomplete.autocomplete(parser)
 else:
-    def try_argcomplete(parser): pass
+    def try_argcomplete(parser):
+        pass
     filescompleter = None

@@ -1,27 +1,29 @@
+from __future__ import absolute_import, division, print_function
+
 import glob
 import os
 import py_compile
 import stat
 import sys
 import zipfile
-
 import py
 import pytest
-
-ast = pytest.importorskip("ast")
-if sys.platform.startswith("java"):
-    # XXX should be xfail
-    pytest.skip("assert rewrite does currently not work on jython")
 
 import _pytest._code
 from _pytest.assertion import util
 from _pytest.assertion.rewrite import rewrite_asserts, PYTEST_TAG, AssertionRewritingHook
 from _pytest.main import EXIT_NOTESTSCOLLECTED
 
+ast = pytest.importorskip("ast")
+if sys.platform.startswith("java"):
+    # XXX should be xfail
+    pytest.skip("assert rewrite does currently not work on jython")
+
 
 def setup_module(mod):
     mod._old_reprcompare = util._reprcompare
     _pytest._code._reprcompare = None
+
 
 def teardown_module(mod):
     util._reprcompare = mod._old_reprcompare
@@ -32,6 +34,7 @@ def rewrite(src):
     tree = ast.parse(src)
     rewrite_asserts(tree)
     return tree
+
 
 def getmsg(f, extra_ns=None, must_pass=False):
     """Rewrite the assertions in f, run it, and get the failure message."""
@@ -57,7 +60,7 @@ def getmsg(f, extra_ns=None, must_pass=False):
             pytest.fail("function didn't raise at all")
 
 
-class TestAssertionRewrite:
+class TestAssertionRewrite(object):
 
     def test_place_initial_imports(self):
         s = """'Doc string'\nother = stuff"""
@@ -117,12 +120,12 @@ class TestAssertionRewrite:
         def f():
             assert a_global  # noqa
 
-        assert getmsg(f, {"a_global" : False}) == "assert False"
+        assert getmsg(f, {"a_global": False}) == "assert False"
 
         def f():
             assert sys == 42
 
-        assert getmsg(f, {"sys" : sys}) == "assert sys == 42"
+        assert getmsg(f, {"sys": sys}) == "assert sys == 42"
 
         def f():
             assert cls == 42  # noqa
@@ -130,7 +133,7 @@ class TestAssertionRewrite:
         class X(object):
             pass
 
-        assert getmsg(f, {"cls" : X}) == "assert cls == 42"
+        assert getmsg(f, {"cls": X}) == "assert cls == 42"
 
     def test_assert_already_has_message(self):
         def f():
@@ -237,13 +240,13 @@ class TestAssertionRewrite:
         def f():
             assert x() and x()
 
-        assert getmsg(f, {"x" : x}) == """assert (False)
+        assert getmsg(f, {"x": x}) == """assert (False)
  +  where False = x()"""
 
         def f():
             assert False or x()
 
-        assert getmsg(f, {"x" : x}) == """assert (False or False)
+        assert getmsg(f, {"x": x}) == """assert (False or False)
  +  where False = x()"""
 
         def f():
@@ -254,7 +257,7 @@ class TestAssertionRewrite:
         def f():
             x = 1
             y = 2
-            assert x in {1 : None} and y in {}
+            assert x in {1: None} and y in {}
 
         assert getmsg(f) == "assert (1 in {1: None} and 2 in {})"
 
@@ -271,7 +274,7 @@ class TestAssertionRewrite:
 
         getmsg(f, must_pass=True)
 
-    def test_short_circut_evaluation(self):
+    def test_short_circuit_evaluation(self):
         def f():
             assert True or explode  # noqa
 
@@ -333,7 +336,7 @@ class TestAssertionRewrite:
     @pytest.mark.skipif("sys.version_info < (3,5)")
     def test_at_operator_issue1290(self, testdir):
         testdir.makepyfile("""
-            class Matrix:
+            class Matrix(object):
                 def __init__(self, num):
                     self.num = num
                 def __matmul__(self, other):
@@ -347,7 +350,7 @@ class TestAssertionRewrite:
         def g(a=42, *args, **kwargs):
             return False
 
-        ns = {"g" : g}
+        ns = {"g": g}
 
         def f():
             assert g()
@@ -388,7 +391,7 @@ class TestAssertionRewrite:
 
         def f():
             x = "a"
-            assert g(**{x : 2})
+            assert g(**{x: 2})
 
         assert getmsg(f, ns) == """assert False
  +  where False = g(**{'a': 2})"""
@@ -397,10 +400,10 @@ class TestAssertionRewrite:
         class X(object):
             g = 3
 
-        ns = {"x" : X}
+        ns = {"x": X}
 
         def f():
-            assert not x.g # noqa
+            assert not x.g  # noqa
 
         assert getmsg(f, ns) == """assert not 3
  +  where 3 = x.g"""
@@ -515,7 +518,7 @@ class TestAssertionRewrite:
         assert r"where 1 = \n{ \n~ \n}.a" in util._format_lines([getmsg(f)])[0]
 
 
-class TestRewriteOnImport:
+class TestRewriteOnImport(object):
 
     def test_pycache_is_a_file(self, testdir):
         testdir.tmpdir.join("__pycache__").write("Hello")
@@ -555,7 +558,7 @@ class TestRewriteOnImport:
     def test_readonly(self, testdir):
         sub = testdir.mkdir("testing")
         sub.join("test_readonly.py").write(
-        py.builtin._totext("""
+            py.builtin._totext("""
 def test_rewritten():
     assert "@py_builtins" in globals()
             """).encode("utf-8"), "wb")
@@ -608,7 +611,7 @@ def test_rewritten():
             def test_optimized():
                 "hello"
                 assert test_optimized.__doc__ is None"""
-        )
+                           )
         p = py.path.local.make_numbered_dir(prefix="runpytest-", keep=None,
                                             rootdir=testdir.tmpdir)
         tmp = "--basetemp=%s" % p
@@ -637,8 +640,8 @@ def test_rewritten():
         testdir.tmpdir.join("test_newlines.py").write(b, "wb")
         assert testdir.runpytest().ret == 0
 
-    @pytest.mark.skipif(sys.version_info < (3,3),
-            reason='packages without __init__.py not supported on python 2')
+    @pytest.mark.skipif(sys.version_info < (3, 3),
+                        reason='packages without __init__.py not supported on python 2')
     def test_package_without__init__py(self, testdir):
         pkg = testdir.mkdir('a_package_without_init_py')
         pkg.join('module.py').ensure()
@@ -710,6 +713,24 @@ def test_rewritten():
         result = testdir.runpytest_subprocess()
         result.stdout.fnmatch_lines(['*= 1 passed in *=*'])
         assert 'pytest-warning summary' not in result.stdout.str()
+
+    @pytest.mark.skipif(sys.version_info[0] > 2, reason='python 2 only')
+    def test_rewrite_future_imports(self, testdir):
+        """Test that rewritten modules don't inherit the __future__ flags
+        from the assertrewrite module.
+
+        assertion.rewrite imports __future__.division (and others), so
+        ensure rewritten modules don't inherit those flags.
+
+        The test below will fail if __future__.division is enabled
+        """
+        testdir.makepyfile('''
+            def test():
+                x = 1 / 2
+                assert type(x) is int
+        ''')
+        result = testdir.runpytest()
+        assert result.ret == 0
 
 
 class TestAssertionRewriteHookDetails(object):
@@ -884,7 +905,7 @@ class TestAssertionRewriteHookDetails(object):
         """
         path = testdir.mkpydir("foo")
         path.join("test_foo.py").write(_pytest._code.Source("""
-            class Test:
+            class Test(object):
                 def test_foo(self):
                     import pkgutil
                     data = pkgutil.get_data('foo.test_foo', 'data.txt')
@@ -912,7 +933,7 @@ def test_issue731(testdir):
     assert 'unbalanced braces' not in result.stdout.str()
 
 
-class TestIssue925():
+class TestIssue925(object):
     def test_simple_case(self, testdir):
         testdir.makepyfile("""
         def test_ternary_display():
@@ -937,3 +958,17 @@ class TestIssue925():
         result = testdir.runpytest()
         result.stdout.fnmatch_lines('*E*assert True == ((False == True) == True)')
 
+
+class TestIssue2121():
+    def test_simple(self, testdir):
+        testdir.tmpdir.join("tests/file.py").ensure().write("""
+def test_simple_failure():
+    assert 1 + 1 == 3
+""")
+        testdir.tmpdir.join("pytest.ini").write(py.std.textwrap.dedent("""
+            [pytest]
+            python_files = tests/**.py
+        """))
+
+        result = testdir.runpytest()
+        result.stdout.fnmatch_lines('*E*assert (1 + 1) == 3')

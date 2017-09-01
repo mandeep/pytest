@@ -12,7 +12,10 @@ from _pytest.main import (
 )
 
 
-class TestModule:
+ignore_parametrized_marks = pytest.mark.filterwarnings('ignore:Applying marks directly to parameters')
+
+
+class TestModule(object):
     def test_failing_import(self, testdir):
         modcol = testdir.getmodulecol("import alksdjalskdjalkjals")
         pytest.raises(Collector.CollectError, modcol.collect)
@@ -104,18 +107,34 @@ class TestModule:
             else:
                 assert name not in stdout
 
+    def test_show_traceback_import_error_unicode(self, testdir):
+        """Check test modules collected which raise ImportError with unicode messages
+        are handled properly (#2336).
+        """
+        testdir.makepyfile(u"""
+            # -*- coding: utf-8 -*-
+            raise ImportError(u'Something bad happened ☺')
+        """)
+        result = testdir.runpytest()
+        result.stdout.fnmatch_lines([
+            "ImportError while importing test module*",
+            "Traceback:",
+            "*raise ImportError*Something bad happened*",
+        ])
+        assert result.ret == 2
 
-class TestClass:
+
+class TestClass(object):
     def test_class_with_init_warning(self, testdir):
         testdir.makepyfile("""
-            class TestClass1:
+            class TestClass1(object):
                 def __init__(self):
                     pass
         """)
         result = testdir.runpytest("-rw")
-        result.stdout.fnmatch_lines_random("""
-            WC1*test_class_with_init_warning.py*__init__*
-        """)
+        result.stdout.fnmatch_lines([
+            "*cannot collect test class 'TestClass1' because it has a __init__ constructor",
+        ])
 
     def test_class_subclassobject(self, testdir):
         testdir.getmodulecol("""
@@ -127,9 +146,29 @@ class TestClass:
             "*collected 0*",
         ])
 
+    def test_static_method(self, testdir):
+        testdir.getmodulecol("""
+            class Test(object):
+                @staticmethod
+                def test_something():
+                    pass
+        """)
+        result = testdir.runpytest()
+        if sys.version_info < (2, 7):
+            # in 2.6, the code to handle static methods doesn't work
+            result.stdout.fnmatch_lines([
+                "*collected 0 items*",
+                "*cannot collect static method*",
+            ])
+        else:
+            result.stdout.fnmatch_lines([
+                "*collected 1 item*",
+                "*1 passed in*",
+            ])
+
     def test_setup_teardown_class_as_classmethod(self, testdir):
         testdir.makepyfile(test_mod1="""
-            class TestClassMethod:
+            class TestClassMethod(object):
                 @classmethod
                 def setup_class(cls):
                     pass
@@ -166,8 +205,18 @@ class TestClass:
             "because it has a __new__ constructor*"
         )
 
+    def test_issue2234_property(self, testdir):
+        testdir.makepyfile("""
+            class TestCase(object):
+                @property
+                def prop(self):
+                    raise NotImplementedError()
+        """)
+        result = testdir.runpytest()
+        assert result.ret == EXIT_NOTESTSCOLLECTED
 
-class TestGenerator:
+
+class TestGenerator(object):
     def test_generative_functions(self, testdir):
         modcol = testdir.getmodulecol("""
             def func1(arg, arg2):
@@ -192,7 +241,7 @@ class TestGenerator:
         modcol = testdir.getmodulecol("""
             def func1(arg, arg2):
                 assert arg == arg2
-            class TestGenMethods:
+            class TestGenMethods(object):
                 def test_gen(self):
                     yield func1, 17, 3*5
                     yield func1, 42, 6*7
@@ -246,7 +295,7 @@ class TestGenerator:
         modcol = testdir.getmodulecol("""
             def func1(arg, arg2):
                 assert arg == arg2
-            class TestGenMethods:
+            class TestGenMethods(object):
                 def test_gen(self):
                     yield "m1", func1, 17, 3*5
                     yield "m2", func1, 42, 6*7
@@ -264,6 +313,7 @@ class TestGenerator:
 
     def test_order_of_execution_generator_same_codeline(self, testdir, tmpdir):
         o = testdir.makepyfile("""
+            from __future__ import print_function
             def test_generative_order_of_execution():
                 import py, pytest
                 test_list = []
@@ -273,8 +323,8 @@ class TestGenerator:
                     test_list.append(item)
 
                 def assert_order_of_execution():
-                    py.builtin.print_('expected order', expected_list)
-                    py.builtin.print_('but got       ', test_list)
+                    print('expected order', expected_list)
+                    print('but got       ', test_list)
                     assert test_list == expected_list
 
                 for i in expected_list:
@@ -288,6 +338,7 @@ class TestGenerator:
 
     def test_order_of_execution_generator_different_codeline(self, testdir):
         o = testdir.makepyfile("""
+            from __future__ import print_function
             def test_generative_tests_different_codeline():
                 import py, pytest
                 test_list = []
@@ -303,8 +354,8 @@ class TestGenerator:
                     test_list.append(0)
 
                 def assert_order_of_execution():
-                    py.builtin.print_('expected order', expected_list)
-                    py.builtin.print_('but got       ', test_list)
+                    print('expected order', expected_list)
+                    print('but got       ', test_list)
                     assert test_list == expected_list
 
                 yield list_append_0
@@ -326,7 +377,7 @@ class TestGenerator:
         # has been used during collection.
         o = testdir.makepyfile("""
             setuplist = []
-            class TestClass:
+            class TestClass(object):
                 def setup_method(self, func):
                     #print "setup_method", self, func
                     setuplist.append(self)
@@ -360,7 +411,7 @@ class TestGenerator:
         assert not skipped and not failed
 
 
-class TestFunction:
+class TestFunction(object):
     def test_getmodulecollector(self, testdir):
         item = testdir.getitem("def test_func(): pass")
         modcol = item.getparent(pytest.Module)
@@ -369,7 +420,7 @@ class TestFunction:
 
     def test_function_as_object_instance_ignored(self, testdir):
         testdir.makepyfile("""
-            class A:
+            class A(object):
                 def __call__(self, tmpdir):
                     0/0
 
@@ -391,10 +442,10 @@ class TestFunction:
             pass
 
         f1 = pytest.Function(name="name", parent=session, config=config,
-                args=(1,), callobj=func1)
+                             args=(1,), callobj=func1)
         assert f1 == f1
-        f2 = pytest.Function(name="name",config=config,
-                callobj=func2, parent=session)
+        f2 = pytest.Function(name="name", config=config,
+                             callobj=func2, parent=session)
         assert f1 != f2
 
     def test_issue197_parametrize_emptyset(self, testdir):
@@ -420,7 +471,7 @@ class TestFunction:
     def test_issue213_parametrize_value_no_equal(self, testdir):
         testdir.makepyfile("""
             import pytest
-            class A:
+            class A(object):
                 def __eq__(self, other):
                     raise ValueError("not possible")
             @pytest.mark.parametrize('arg', [A()])
@@ -447,7 +498,6 @@ class TestFunction:
         """)
         rec = testdir.inline_run()
         rec.assertoutcome(passed=2)
-
 
     def test_parametrize_with_non_hashable_values_indirect(self, testdir):
         """Test parametrization with non-hashable values with indirect parametrization."""
@@ -476,7 +526,6 @@ class TestFunction:
         rec = testdir.inline_run()
         rec.assertoutcome(passed=2)
 
-
     def test_parametrize_overrides_fixture(self, testdir):
         """Test parametrization when parameter overrides existing fixture with same name."""
         testdir.makepyfile("""
@@ -504,7 +553,6 @@ class TestFunction:
         rec = testdir.inline_run()
         rec.assertoutcome(passed=3)
 
-
     def test_parametrize_overrides_parametrized_fixture(self, testdir):
         """Test parametrization when parameter overrides existing parametrized fixture with same name."""
         testdir.makepyfile("""
@@ -522,7 +570,8 @@ class TestFunction:
         rec = testdir.inline_run()
         rec.assertoutcome(passed=1)
 
-    def test_parametrize_with_mark(selfself, testdir):
+    @ignore_parametrized_marks
+    def test_parametrize_with_mark(self, testdir):
         items = testdir.getitems("""
             import pytest
             @pytest.mark.foo
@@ -551,11 +600,11 @@ class TestFunction:
         item = testdir.getitem("def test_func(): raise ValueError")
         config = item.config
 
-        class MyPlugin1:
+        class MyPlugin1(object):
             def pytest_pyfunc_call(self, pyfuncitem):
                 raise ValueError
 
-        class MyPlugin2:
+        class MyPlugin2(object):
             def pytest_pyfunc_call(self, pyfuncitem):
                 return True
 
@@ -595,6 +644,7 @@ class TestFunction:
         assert colitems[2].name == 'test2[a-c]'
         assert colitems[3].name == 'test2[b-c]'
 
+    @ignore_parametrized_marks
     def test_parametrize_skipif(self, testdir):
         testdir.makepyfile("""
             import pytest
@@ -608,6 +658,7 @@ class TestFunction:
         result = testdir.runpytest()
         result.stdout.fnmatch_lines('* 2 passed, 1 skipped in *')
 
+    @ignore_parametrized_marks
     def test_parametrize_skip(self, testdir):
         testdir.makepyfile("""
             import pytest
@@ -621,6 +672,7 @@ class TestFunction:
         result = testdir.runpytest()
         result.stdout.fnmatch_lines('* 2 passed, 1 skipped in *')
 
+    @ignore_parametrized_marks
     def test_parametrize_skipif_no_skip(self, testdir):
         testdir.makepyfile("""
             import pytest
@@ -634,6 +686,7 @@ class TestFunction:
         result = testdir.runpytest()
         result.stdout.fnmatch_lines('* 1 failed, 2 passed in *')
 
+    @ignore_parametrized_marks
     def test_parametrize_xfail(self, testdir):
         testdir.makepyfile("""
             import pytest
@@ -647,6 +700,7 @@ class TestFunction:
         result = testdir.runpytest()
         result.stdout.fnmatch_lines('* 2 passed, 1 xfailed in *')
 
+    @ignore_parametrized_marks
     def test_parametrize_passed(self, testdir):
         testdir.makepyfile("""
             import pytest
@@ -660,6 +714,7 @@ class TestFunction:
         result = testdir.runpytest()
         result.stdout.fnmatch_lines('* 2 passed, 1 xpassed in *')
 
+    @ignore_parametrized_marks
     def test_parametrize_xfail_passed(self, testdir):
         testdir.makepyfile("""
             import pytest
@@ -683,7 +738,7 @@ class TestFunction:
         assert [x.originalname for x in items] == ['test_func', 'test_func']
 
 
-class TestSorting:
+class TestSorting(object):
     def test_check_equality(self, testdir):
         modcol = testdir.getmodulecol("""
             def test_pass(): pass
@@ -705,11 +760,11 @@ class TestSorting:
         assert not (fn1 == fn3)
         assert fn1 != fn3
 
-        for fn in fn1,fn2,fn3:
+        for fn in fn1, fn2, fn3:
             assert fn != 3
             assert fn != modcol
-            assert fn != [1,2,3]
-            assert [1,2,3] != fn
+            assert fn != [1, 2, 3]
+            assert [1, 2, 3] != fn
             assert modcol != fn
 
     def test_allow_sane_sorting_for_decorators(self, testdir):
@@ -733,7 +788,7 @@ class TestSorting:
         assert [item.name for item in colitems] == ['test_b', 'test_a']
 
 
-class TestConftestCustomization:
+class TestConftestCustomization(object):
     def test_pytest_pycollect_module(self, testdir):
         testdir.makeconftest("""
             import pytest
@@ -810,9 +865,38 @@ class TestConftestCustomization:
         modcol = testdir.getmodulecol("def _hello(): pass")
         l = []
         monkeypatch.setattr(pytest.Module, 'makeitem',
-            lambda self, name, obj: l.append(name))
+                            lambda self, name, obj: l.append(name))
         l = modcol.collect()
         assert '_hello' not in l
+
+    def test_issue2369_collect_module_fileext(self, testdir):
+        """Ensure we can collect files with weird file extensions as Python
+        modules (#2369)"""
+        # We'll implement a little finder and loader to import files containing
+        # Python source code whose file extension is ".narf".
+        testdir.makeconftest("""
+            import sys, os, imp
+            from _pytest.python import Module
+
+            class Loader:
+                def load_module(self, name):
+                    return imp.load_source(name, name + ".narf")
+            class Finder:
+                def find_module(self, name, path=None):
+                    if os.path.exists(name + ".narf"):
+                        return Loader()
+            sys.meta_path.append(Finder())
+
+            def pytest_collect_file(path, parent):
+                if path.ext == ".narf":
+                    return Module(path, parent)""")
+        testdir.makefile(".narf", """
+            def test_something():
+                assert 1 + 1 == 2""")
+        # Use runpytest_subprocess, since we're futzing with sys.meta_path.
+        result = testdir.runpytest_subprocess()
+        result.stdout.fnmatch_lines('*1 passed*')
+
 
 def test_setup_only_available_in_subdir(testdir):
     sub1 = testdir.mkpydir("sub1")
@@ -840,6 +924,7 @@ def test_setup_only_available_in_subdir(testdir):
     result = testdir.runpytest("-v", "-s")
     result.assert_outcomes(passed=2)
 
+
 def test_modulecol_roundtrip(testdir):
     modcol = testdir.getmodulecol("pass", withinit=True)
     trail = modcol.nodeid
@@ -847,7 +932,7 @@ def test_modulecol_roundtrip(testdir):
     assert modcol.name == newcol.name
 
 
-class TestTracebackCutting:
+class TestTracebackCutting(object):
     def test_skip_simple(self):
         excinfo = pytest.raises(pytest.skip.Exception, 'pytest.skip("xxx")')
         assert excinfo.traceback[-1].frame.code.name == "skip"
@@ -867,13 +952,13 @@ class TestTracebackCutting:
         out = result.stdout.str()
         assert "xyz" in out
         assert "conftest.py:5: ValueError" in out
-        numentries = out.count("_ _ _") # separator for traceback entries
+        numentries = out.count("_ _ _")  # separator for traceback entries
         assert numentries == 0
 
         result = testdir.runpytest("--fulltrace", p)
         out = result.stdout.str()
         assert "conftest.py:5: ValueError" in out
-        numentries = out.count("_ _ _ _") # separator for traceback entries
+        numentries = out.count("_ _ _ _")  # separator for traceback entries
         assert numentries > 3
 
     def test_traceback_error_during_import(self, testdir):
@@ -973,7 +1058,7 @@ class TestTracebackCutting:
         assert filter_traceback(tb[-1])
 
 
-class TestReportInfo:
+class TestReportInfo(object):
     def test_itemreport_reportinfo(self, testdir, linecomp):
         testdir.makeconftest("""
             import pytest
@@ -998,7 +1083,7 @@ class TestReportInfo:
     def test_class_reportinfo(self, testdir):
         modcol = testdir.getmodulecol("""
             # lineno 0
-            class TestClass:
+            class TestClass(object):
                 def test_hello(self): pass
         """)
         classcol = testdir.collect_by_name(modcol, "TestClass")
@@ -1033,7 +1118,7 @@ class TestReportInfo:
                 def check(x):
                     pass
                 yield check, 3
-            class TestClass:
+            class TestClass(object):
                 def test_method(self):
                     pass
        """
@@ -1042,7 +1127,7 @@ class TestReportInfo:
         # https://github.com/pytest-dev/pytest/issues/1204
         modcol = testdir.getmodulecol("""
             # lineno 0
-            class TestClass:
+            class TestClass(object):
                 def __getattr__(self, name):
                     return "this is not an int"
 
@@ -1064,7 +1149,7 @@ def test_customized_python_discovery(testdir):
     p = testdir.makepyfile("""
         def check_simple():
             pass
-        class CheckMyApp:
+        class CheckMyApp(object):
             def check_meth(self):
                 pass
     """)
@@ -1124,6 +1209,7 @@ def test_collector_attributes(testdir):
         "*1 passed*",
     ])
 
+
 def test_customize_through_attributes(testdir):
     testdir.makeconftest("""
         import pytest
@@ -1139,7 +1225,7 @@ def test_customize_through_attributes(testdir):
                 return MyClass(name, parent=collector)
     """)
     testdir.makepyfile("""
-         class MyTestClass:
+         class MyTestClass(object):
             def test_hello(self):
                 pass
     """)
@@ -1153,11 +1239,11 @@ def test_customize_through_attributes(testdir):
 
 def test_unorderable_types(testdir):
     testdir.makepyfile("""
-        class TestJoinEmpty:
+        class TestJoinEmpty(object):
             pass
 
         def make_test():
-            class Test:
+            class Test(object):
                 pass
             Test.__name__ = "TestFoo"
             return Test
@@ -1231,8 +1317,8 @@ def test_dont_collect_non_function_callable(testdir):
     result = testdir.runpytest('-rw')
     result.stdout.fnmatch_lines([
         '*collected 1 item*',
-        'WC2 *',
-        '*1 passed, 1 pytest-warnings in *',
+        "*cannot collect 'test_a' because it is not a function*",
+        '*1 passed, 1 warnings in *',
     ])
 
 
@@ -1291,7 +1377,6 @@ def test_skip_duplicates_by_default(testdir):
     result.stdout.fnmatch_lines([
         '*collected 1 item*',
     ])
-
 
 
 def test_keep_duplicates(testdir):

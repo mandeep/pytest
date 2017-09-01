@@ -26,9 +26,9 @@ you will see the return value of the function call::
 
     $ pytest test_assert1.py
     ======= test session starts ========
-    platform linux -- Python 3.5.2, pytest-3.0.5, py-1.4.31, pluggy-0.4.0
-    rootdir: $REGENDOC_TMPDIR, inifile: 
-    collected 1 items
+    platform linux -- Python 3.x.y, pytest-3.x.y, py-1.x.y, pluggy-0.x.y
+    rootdir: $REGENDOC_TMPDIR, inifile:
+    collected 1 item
     
     test_assert1.py F
     
@@ -119,9 +119,9 @@ exceptions your own code is deliberately raising, whereas using
 like documenting unfixed bugs (where the test describes what "should" happen)
 or bugs in dependencies.
 
-If you want to test that a regular expression matches on the string
-representation of an exception (like the ``TestCase.assertRaisesRegexp`` method
-from ``unittest``) you can use the ``ExceptionInfo.match`` method::
+Also, the context manager form accepts a ``match`` keyword parameter to test
+that a regular expression matches on the string representation of an exception
+(like the ``TestCase.assertRaisesRegexp`` method from ``unittest``)::
 
     import pytest
 
@@ -129,12 +129,11 @@ from ``unittest``) you can use the ``ExceptionInfo.match`` method::
         raise ValueError("Exception 123 raised")
 
     def test_match():
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(ValueError, match=r'.* 123 .*'):
             myfunc()
-        excinfo.match(r'.* 123 .*')
 
 The regexp parameter of the ``match`` method is matched with the ``re.search``
-function. So in the above example ``excinfo.match('123')`` would have worked as
+function. So in the above example ``match='123'`` would have worked as
 well.
 
 
@@ -170,9 +169,9 @@ if you run this module::
 
     $ pytest test_assert2.py
     ======= test session starts ========
-    platform linux -- Python 3.5.2, pytest-3.0.5, py-1.4.31, pluggy-0.4.0
-    rootdir: $REGENDOC_TMPDIR, inifile: 
-    collected 1 items
+    platform linux -- Python 3.x.y, pytest-3.x.y, py-1.x.y, pluggy-0.x.y
+    rootdir: $REGENDOC_TMPDIR, inifile:
+    collected 1 item
     
     test_assert2.py F
     
@@ -183,7 +182,7 @@ if you run this module::
             set1 = set("1308")
             set2 = set("8035")
     >       assert set1 == set2
-    E       assert {'0', '1', '3', '8'} == {'0', '3', '5', '8'}
+    E       AssertionError: assert {'0', '1', '3', '8'} == {'0', '3', '5', '8'}
     E         Extra items in the left set:
     E         '1'
     E         Extra items in the right set:
@@ -223,7 +222,7 @@ provides an alternative explanation for ``Foo`` objects::
 now, given this test module::
 
    # content of test_foocompare.py
-   class Foo:
+   class Foo(object):
        def __init__(self, val):
            self.val = val
 
@@ -270,12 +269,21 @@ supporting modules which are not themselves test modules will not be rewritten.
 
 .. note::
 
-   ``pytest`` rewrites test modules on import. It does this by using an import
-   hook to write new pyc files. Most of the time this works transparently.
+   ``pytest`` rewrites test modules on import by using an import
+   hook to write new ``pyc`` files. Most of the time this works transparently.
    However, if you are messing with import yourself, the import hook may
-   interfere. If this is the case, use ``--assert=plain``. Additionally,
-   rewriting will fail silently if it cannot write new pycs, i.e. in a read-only
-   filesystem or a zipfile.
+   interfere.
+
+   If this is the case you have two options:
+
+   * Disable rewriting for a specific module by adding the string
+     ``PYTEST_DONT_REWRITE`` to its docstring.
+
+   * Disable rewriting for all modules by using ``--assert=plain``.
+
+   Additionally, rewriting will fail silently if it cannot write new ``.pyc`` files,
+   i.e. in a read-only filesystem or a zipfile.
+
 
 For further information, Benjamin Peterson wrote up `Behind the scenes of pytest's new assertion rewriting <http://pybites.blogspot.com/2011/07/behind-scenes-of-pytests-new-assertion.html>`_.
 
@@ -287,5 +295,5 @@ For further information, Benjamin Peterson wrote up `Behind the scenes of pytest
    ``--nomagic``.
 
 .. versionchanged:: 3.0
-   Removes the ``--no-assert`` and``--nomagic`` options.
+   Removes the ``--no-assert`` and ``--nomagic`` options.
    Removes the ``--assert=reinterp`` option.

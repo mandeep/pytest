@@ -1,85 +1,61 @@
 How to release pytest
 --------------------------------------------
 
-Note: this assumes you have already registered on pypi.
+.. important::
 
-1. Bump version numbers in ``_pytest/__init__.py`` (``setup.py`` reads it).
+    pytest releases must be prepared on **Linux** because the docs and examples expect
+    to be executed in that platform.
 
-2. Check and finalize ``CHANGELOG.rst``.
+#. Install development dependencies in a virtual environment with::
 
-3. Write ``doc/en/announce/release-VERSION.txt`` and include
-   it in ``doc/en/announce/index.txt``. Run this command to list names of authors involved::
+    pip3 install -r tasks/requirements.txt
 
-        git log $(git describe --abbrev=0 --tags)..HEAD --format='%aN' | sort -u
+#. Create a branch ``release-X.Y.Z`` with the version for the release.
 
-4. Regenerate the docs examples using tox::
+   * **patch releases**: from the latest ``master``;
 
-      tox -e regen
+   * **minor releases**: from the latest ``features``; then merge with the latest ``master``;
 
-5. At this point, open a PR named ``release-X`` so others can help find regressions or provide suggestions.
+   Ensure your are in a clean work tree.
 
-6. Use devpi for uploading a release tarball to a staging area::
+#. Generate docs, changelog, announcements and upload a package to
+   your ``devpi`` staging server::
 
-     devpi use https://devpi.net/USER/dev
-     devpi upload --formats sdist,bdist_wheel
+     invoke generate.pre_release <VERSION> <DEVPI USER> --password <DEVPI PASSWORD>
 
-7. Run from multiple machines::
+   If ``--password`` is not given, it is assumed the user is already logged in ``devpi``.
+   If you don't have an account, please ask for one.
 
-     devpi use https://devpi.net/USER/dev
-     devpi test pytest==VERSION
+#. Open a PR for this branch targeting ``master``.
 
-   Alternatively, you can use `devpi-cloud-tester <https://github.com/nicoddemus/devpi-cloud-tester>`_ to test
-   the package on AppVeyor and Travis (follow instructions on the ``README``).
+#. Test the package
 
-8. Check that tests pass for relevant combinations with::
+   * **Manual method**
+
+     Run from multiple machines::
+
+       devpi use https://devpi.net/USER/dev
+       devpi test pytest==VERSION
+
+     Check that tests pass for relevant combinations with::
 
        devpi list pytest
 
-   or look at failures with "devpi list -f pytest".
+   * **CI servers**
 
-9. Feeling confident? Publish to pypi::
+     Configure a repository as per-instructions on
+     devpi-cloud-test_ to test the package on Travis_ and AppVeyor_.
+     All test environments should pass.
 
-      devpi push pytest==VERSION pypi:NAME
+#. Publish to PyPI::
 
-   where NAME is the name of pypi.python.org as configured in your ``~/.pypirc``
+      invoke generate.publish_release <VERSION> <DEVPI USER> <PYPI_NAME>
+
+   where PYPI_NAME is the name of pypi.python.org as configured in your ``~/.pypirc``
    file `for devpi <http://doc.devpi.net/latest/quickstart-releaseprocess.html?highlight=pypirc#devpi-push-releasing-to-an-external-index>`_.
 
-10. Tag the release::
+#. After a minor/major release, merge ``release-X.Y.Z`` into ``master`` and push (or open a PR).
 
-      git tag VERSION <hash>
-      git push origin VERSION
-
-    Make sure ``<hash>`` is **exactly** the git hash at the time the package was created.
-
-11. Send release announcement to mailing lists:
-
-    - pytest-dev@python.org
-    - python-announce-list@python.org
-    - testing-in-python@lists.idyll.org (only for minor/major releases)
-
-    And announce the release on Twitter, making sure to add the hashtag ``#pytest``.
-
-12. **After the release**
-
-  a. **patch release (2.8.3)**:
-
-        1. Checkout ``master``.
-        2. Update version number in ``_pytest/__init__.py`` to ``"2.8.4.dev0"``.
-        3. Create a new section in ``CHANGELOG.rst`` titled ``2.8.4.dev0`` and add a few bullet points as placeholders for new entries.
-        4. Commit and push.
-
-  b. **minor release (2.9.0)**:
-
-        1. Merge ``features`` into ``master``.
-        2. Checkout ``master``.
-        3. Follow the same steps for a **patch release** above, using the next patch release: ``2.9.1.dev0``.
-        4. Commit ``master``.
-        5. Checkout ``features`` and merge with ``master`` (should be a fast-forward at this point).
-        6. Update version number in ``_pytest/__init__.py`` to the next minor release: ``"2.10.0.dev0"``.
-        7. Create a new section in ``CHANGELOG.rst`` titled ``2.10.0.dev0``, above ``2.9.1.dev0``, and add a few bullet points as placeholders for new entries.
-        8. Commit ``features``.
-        9. Push ``master`` and ``features``.
-
-  c. **major release (3.0.0)**: same steps as that of a **minor release**
-
-
+.. _devpi-cloud-test: https://github.com/obestwalter/devpi-cloud-test
+.. _AppVeyor: https://www.appveyor.com/
+.. _Travis: https://travis-ci.org
