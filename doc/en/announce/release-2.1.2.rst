@@ -19,7 +19,7 @@ If you want to install or upgrade pytest, just type one of::
     easy_install -U pytest
 
 best,
-holger krekel / http://merlinux.eu
+holger krekel / https://merlinux.eu/
 
 Changes between 2.1.1 and 2.1.2
 ----------------------------------------
@@ -30,4 +30,3 @@ Changes between 2.1.1 and 2.1.2
 - fix issue68 / packages now work with assertion rewriting
 - fix issue66: use different assertion rewriting caches when the -O option is passed
 - don't try assertion rewriting on Jython, use reinterp
-

@@ -1,3 +1,10 @@
-# pinning sphinx to 1.4.* due to search issues with rtd:
-# https://github.com/rtfd/readthedocs-sphinx-ext/issues/25
-sphinx ==1.4.*
+-c broken-dep-constraints.txt
+pluggy>=1.5.0
+pygments-pytest>=2.3.0
+sphinx-removed-in>=0.2.0
+sphinx>=7
+sphinxcontrib-trio
+sphinxcontrib-svg2pdfconverter
+furo
+sphinxcontrib-towncrier
+sphinx-issues
