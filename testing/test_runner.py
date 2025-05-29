@@ -137,8 +137,8 @@ class TestSetupState:
             ss.teardown_exact(None)
         mod, func = e.value.exceptions
         assert isinstance(mod, KeyError)
-        assert isinstance(func.exceptions[0], TypeError)  # type: ignore
-        assert isinstance(func.exceptions[1], ValueError)  # type: ignore
+        assert isinstance(func.exceptions[0], TypeError)
+        assert isinstance(func.exceptions[1], ValueError)
 
     def test_cached_exception_doesnt_get_longer(self, pytester: Pytester) -> None:
         """Regression test for #12204 (the "BTW" case)."""
@@ -1030,7 +1030,7 @@ def test_store_except_info_on_error() -> None:
     assert sys.last_type is IndexError
     assert isinstance(sys.last_value, IndexError)
     if sys.version_info >= (3, 12, 0):
-        assert isinstance(sys.last_exc, IndexError)
+        assert isinstance(sys.last_exc, IndexError)  # type:ignore[attr-defined]
 
     assert sys.last_value.args[0] == "TEST"
     assert sys.last_traceback

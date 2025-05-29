@@ -52,6 +52,16 @@ def custom_pdb_calls() -> list[str]:
         def interaction(self, *args):
             called.append("interaction")
 
+        # Methods which we copy docstrings to.
+        def do_debug(self, *args):  # pragma: no cover
+            pass
+
+        def do_continue(self, *args):  # pragma: no cover
+            pass
+
+        def do_quit(self, *args):  # pragma: no cover
+            pass
+
     _pytest._CustomPdb = _CustomPdb  # type: ignore
     return called
 
@@ -74,6 +84,16 @@ def custom_debugger_hook():
         def set_trace(self, frame):
             print("**CustomDebugger**")
             called.append("set_trace")
+
+        # Methods which we copy docstrings to.
+        def do_debug(self, *args):  # pragma: no cover
+            pass
+
+        def do_continue(self, *args):  # pragma: no cover
+            pass
+
+        def do_quit(self, *args):  # pragma: no cover
+            pass
 
     _pytest._CustomDebugger = _CustomDebugger  # type: ignore
     yield called
@@ -103,7 +123,10 @@ class TestPDB:
         )
         assert rep.failed
         assert len(pdblist) == 1
-        tb = _pytest._code.Traceback(pdblist[0][0])
+        if sys.version_info < (3, 13):
+            tb = _pytest._code.Traceback(pdblist[0][0])
+        else:
+            tb = _pytest._code.Traceback(pdblist[0][0].__traceback__)
         assert tb[-1].name == "test_func"
 
     def test_pdb_on_xfail(self, pytester: Pytester, pdblist) -> None:
@@ -768,9 +791,13 @@ class TestPDB:
             x = 5
         """
         )
+        if sys.version_info[:2] >= (3, 13):
+            break_line = "pytest.set_trace()"
+        else:
+            break_line = "x = 5"
         child = pytester.spawn(f"{sys.executable} {p1}")
-        child.expect("x = 5")
-        child.expect("Pdb")
+        child.expect_exact(break_line)
+        child.expect_exact("Pdb")
         child.sendeof()
         self.flush(child)
 
@@ -785,9 +812,13 @@ class TestPDB:
                 pass
         """
         )
+        if sys.version_info[:2] >= (3, 13):
+            break_line = "pytest.set_trace()"
+        else:
+            break_line = "x = 5"
         child = pytester.spawn_pytest(str(p1))
-        child.expect("x = 5")
-        child.expect("Pdb")
+        child.expect_exact(break_line)
+        child.expect_exact("Pdb")
         child.sendeof()
         self.flush(child)
 
@@ -919,6 +950,67 @@ class TestPDB:
 
         child.expect("__init__")
         child.expect("custom set_trace>")
+        self.flush(child)
+
+    @pytest.mark.skipif(
+        sys.version_info < (3, 13),
+        reason="Navigating exception chains was introduced in 3.13",
+    )
+    def test_pdb_exception_chain_navigation(self, pytester: Pytester) -> None:
+        p1 = pytester.makepyfile(
+            """
+            def inner_raise():
+                is_inner = True
+                raise RuntimeError("Woops")
+
+            def outer_raise():
+                is_inner = False
+                try:
+                    inner_raise()
+                except RuntimeError:
+                    raise RuntimeError("Woopsie")
+
+            def test_1():
+                outer_raise()
+                assert True
+        """
+        )
+        child = pytester.spawn_pytest(f"--pdb {p1}")
+        child.expect("Pdb")
+        child.sendline("is_inner")
+        child.expect_exact("False")
+        child.sendline("exceptions 0")
+        child.sendline("is_inner")
+        child.expect_exact("True")
+        child.sendeof()
+        self.flush(child)
+
+    def test_pdb_wrapped_commands_docstrings(self, pytester: Pytester) -> None:
+        p1 = pytester.makepyfile(
+            """
+            def test_1():
+                assert False
+            """
+        )
+
+        child = pytester.spawn_pytest(f"--pdb {p1}")
+        child.expect("Pdb")
+
+        # Verify no undocumented commands
+        child.sendline("help")
+        child.expect("Documented commands")
+        assert "Undocumented commands" not in child.before.decode()
+
+        child.sendline("help continue")
+        child.expect("Continue execution")
+        child.expect("Pdb")
+
+        child.sendline("help debug")
+        child.expect("Enter a recursive debugger")
+        child.expect("Pdb")
+
+        child.sendline("c")
+        child.sendeof()
         self.flush(child)
 
 
@@ -1244,6 +1336,16 @@ def test_pdbcls_via_local_module(pytester: Pytester) -> None:
 
                 def runcall(self, *args, **kwds):
                     print("runcall_called", args, kwds)
+
+                # Methods which we copy the docstring over.
+                def do_debug(self, *args):
+                    pass
+
+                def do_continue(self, *args):
+                    pass
+
+                def do_quit(self, *args):
+                    pass
         """,
     )
     result = pytester.runpytest(
@@ -1310,6 +1412,16 @@ def test_pdb_wrapper_class_is_reused(pytester: Pytester) -> None:
 
             def set_trace(self, *args):
                 print("set_trace_called", args)
+
+            # Methods which we copy the docstring over.
+            def do_debug(self, *args):
+                pass
+
+            def do_continue(self, *args):
+                pass
+
+            def do_quit(self, *args):
+                pass
         """,
     )
     result = pytester.runpytest(str(p1), "--pdbcls=mypdb:MyPdb", syspathinsert=True)

@@ -164,7 +164,7 @@ Now we'll get feedback on a bad argument:
 
     $ pytest -q --cmdopt=type3
     ERROR: usage: pytest [options] [file_or_dir] [file_or_dir] [...]
-    pytest: error: argument --cmdopt: invalid choice: 'type3' (choose from 'type1', 'type2')
+    pytest: error: argument --cmdopt: invalid choice: 'type3' (choose from type1, type2)
 
 
 If you need to provide more detailed error messages, you can use the
@@ -460,7 +460,7 @@ display more information if applicable:
 
 
     def pytest_report_header(config):
-        if config.getoption("verbose") > 0:
+        if config.get_verbosity() > 0:
             return ["info1: did you know that ...", "did you?"]
 
 which will add info only when run with "--v":
@@ -904,7 +904,9 @@ here is a little example implemented via a local plugin:
         # "function" scope
         report = request.node.stash[phase_report_key]
         if report["setup"].failed:
-            print("setting up a test failed or skipped", request.node.nodeid)
+            print("setting up a test failed", request.node.nodeid)
+        elif report["setup"].skipped:
+            print("setting up a test skipped", request.node.nodeid)
         elif ("call" not in report) or report["call"].failed:
             print("executing test failed or skipped", request.node.nodeid)
 

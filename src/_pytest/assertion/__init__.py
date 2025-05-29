@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 import sys
 from typing import Any
-from typing import Generator
 from typing import TYPE_CHECKING
 
 from _pytest.assertion import rewrite
@@ -45,6 +45,18 @@ def pytest_addoption(parser: Parser) -> None:
         help="Enables the pytest_assertion_pass hook. "
         "Make sure to delete any previously generated pyc cache files.",
     )
+
+    parser.addini(
+        "truncation_limit_lines",
+        default=None,
+        help="Set threshold of LINES after which truncation will take effect",
+    )
+    parser.addini(
+        "truncation_limit_chars",
+        default=None,
+        help=("Set threshold of CHARS after which truncation will take effect"),
+    )
+
     Config._add_verbosity_ini(
         parser,
         Config.VERBOSITY_ASSERTIONS,

@@ -22,7 +22,7 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
     cachedir: .pytest_cache
     rootdir: /home/sweet/project
     collected 0 items
-    cache -- .../_pytest/cacheprovider.py:558
+    cache -- .../_pytest/cacheprovider.py:556
         Return a cache object that can persist state between testing sessions.
 
         cache.get(key, default)
@@ -33,7 +33,7 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
 
         Values can be any object handled by the json stdlib module.
 
-    capsysbinary -- .../_pytest/capture.py:1005
+    capsysbinary -- .../_pytest/capture.py:1024
         Enable bytes capturing of writes to ``sys.stdout`` and ``sys.stderr``.
 
         The captured output is made available via ``capsysbinary.readouterr()``
@@ -51,7 +51,7 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
                 captured = capsysbinary.readouterr()
                 assert captured.out == b"hello\n"
 
-    capfd -- .../_pytest/capture.py:1033
+    capfd -- .../_pytest/capture.py:1052
         Enable text capturing of writes to file descriptors ``1`` and ``2``.
 
         The captured output is made available via ``capfd.readouterr()`` method
@@ -69,7 +69,7 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
                 captured = capfd.readouterr()
                 assert captured.out == "hello\n"
 
-    capfdbinary -- .../_pytest/capture.py:1061
+    capfdbinary -- .../_pytest/capture.py:1080
         Enable bytes capturing of writes to file descriptors ``1`` and ``2``.
 
         The captured output is made available via ``capfd.readouterr()`` method
@@ -87,7 +87,7 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
                 captured = capfdbinary.readouterr()
                 assert captured.out == b"hello\n"
 
-    capsys -- .../_pytest/capture.py:977
+    capsys -- .../_pytest/capture.py:996
         Enable text capturing of writes to ``sys.stdout`` and ``sys.stderr``.
 
         The captured output is made available via ``capsys.readouterr()`` method
@@ -105,7 +105,7 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
                 captured = capsys.readouterr()
                 assert captured.out == "hello\n"
 
-    doctest_namespace [session scope] -- .../_pytest/doctest.py:740
+    doctest_namespace [session scope] -- .../_pytest/doctest.py:741
         Fixture that returns a :py:class:`dict` that will be injected into the
         namespace of doctests.
 
@@ -119,14 +119,14 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
 
         For more details: :ref:`doctest_namespace`.
 
-    pytestconfig [session scope] -- .../_pytest/fixtures.py:1344
+    pytestconfig [session scope] -- .../_pytest/fixtures.py:1345
         Session-scoped fixture that returns the session's :class:`pytest.Config`
         object.
 
         Example::
 
             def test_foo(pytestconfig):
-                if pytestconfig.getoption("verbose") > 0:
+                if pytestconfig.get_verbosity() > 0:
                     ...
 
     record_property -- .../_pytest/junitxml.py:280
@@ -178,16 +178,11 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
         Return a :class:`pytest.TempdirFactory` instance for the test session.
 
     tmpdir -- .../_pytest/legacypath.py:305
-        Return a temporary directory path object which is unique to each test
-        function invocation, created as a sub directory of the base temporary
-        directory.
-
-        By default, a new base temporary directory is created each test session,
-        and old bases are removed after 3 sessions, to aid in debugging. If
-        ``--basetemp`` is used then it is cleared each session. See
-        :ref:`temporary directory location and retention`.
-
-        The returned object is a `legacy_path`_ object.
+        Return a temporary directory (as `legacy_path`_ object)
+        which is unique to each test function invocation.
+        The temporary directory is created as a subdirectory
+        of the base temporary directory, with configurable retention,
+        as discussed in :ref:`temporary directory location and retention`.
 
         .. note::
             These days, it is preferred to use ``tmp_path``.
@@ -196,7 +191,7 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
 
         .. _legacy_path: https://py.readthedocs.io/en/latest/path.html
 
-    caplog -- .../_pytest/logging.py:600
+    caplog -- .../_pytest/logging.py:598
         Access and control log capturing.
 
         Captured logs are available through the following properties/methods::
@@ -234,25 +229,17 @@ For information about fixtures, see :ref:`fixtures`. To see a complete list of a
     recwarn -- .../_pytest/recwarn.py:35
         Return a :class:`WarningsRecorder` instance that records all warnings emitted by test functions.
 
-        See https://docs.pytest.org/en/latest/how-to/capture-warnings.html for information
-        on warning categories.
+        See :ref:`warnings` for information on warning categories.
 
-    tmp_path_factory [session scope] -- .../_pytest/tmpdir.py:242
+    tmp_path_factory [session scope] -- .../_pytest/tmpdir.py:241
         Return a :class:`pytest.TempPathFactory` instance for the test session.
 
-    tmp_path -- .../_pytest/tmpdir.py:257
-        Return a temporary directory path object which is unique to each test
-        function invocation, created as a sub directory of the base temporary
-        directory.
-
-        By default, a new base temporary directory is created each test session,
-        and old bases are removed after 3 sessions, to aid in debugging.
-        This behavior can be configured with :confval:`tmp_path_retention_count` and
-        :confval:`tmp_path_retention_policy`.
-        If ``--basetemp`` is used then it is cleared each session. See
-        :ref:`temporary directory location and retention`.
-
-        The returned object is a :class:`pathlib.Path` object.
+    tmp_path -- .../_pytest/tmpdir.py:256
+        Return a temporary directory (as :class:`pathlib.Path` object)
+        which is unique to each test function invocation.
+        The temporary directory is created as a subdirectory
+        of the base temporary directory, with configurable retention,
+        as discussed in :ref:`temporary directory location and retention`.
 
 
     ========================== no tests ran in 0.12s ===========================

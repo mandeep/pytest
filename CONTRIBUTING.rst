@@ -139,9 +139,8 @@ The objectives of the ``pytest-dev`` organisation are:
 * Sharing some of the maintenance responsibility (in case a maintainer no
   longer wishes to maintain a plugin)
 
-You can submit your plugin by subscribing to the `pytest-dev mail list
-<https://mail.python.org/mailman/listinfo/pytest-dev>`_ and writing a
-mail pointing to your existing pytest plugin repository which must have
+You can submit your plugin by posting a new topic in the `pytest-dev GitHub Discussions
+<https://github.com/pytest-dev/pytest/discussions>`_ pointing to your existing pytest plugin repository which must have
 the following:
 
 - PyPI presence with packaging metadata that contains a ``pytest-``
@@ -270,7 +269,7 @@ Here is a simple overview, with pytest-specific bits:
 
 #. Run all the tests
 
-   You need to have Python 3.8 or later available in your system.  Now
+   You need to have Python 3.9 or later available in your system.  Now
    running tests is as simple as issuing this command::
 
     $ tox -e linting,py39
@@ -543,4 +542,4 @@ Closing issues
 
 When a pull request is submitted to fix an issue, add text like ``closes #XYZW`` to the PR description and/or commits (where ``XYZW`` is the issue number). See the `GitHub docs <https://help.github.com/en/github/managing-your-work-on-github/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword>`_ for more information.
 
-When an issue is due to user error (e.g. misunderstanding of a functionality), please politely explain to the user why the issue raised is really a non-issue and ask them to close the issue if they have no further questions. If the original requestor is unresponsive, the issue will be handled as described in the section `Handling stale issues/PRs`_ above.
+When an issue is due to user error (e.g. misunderstanding of a functionality), please politely explain to the user why the issue raised is really a non-issue and ask them to close the issue if they have no further questions. If the original requester is unresponsive, the issue will be handled as described in the section `Handling stale issues/PRs`_ above.

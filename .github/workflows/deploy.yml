@@ -31,7 +31,7 @@ jobs:
         persist-credentials: false
 
     - name: Build and Check Package
-      uses: hynek/build-and-inspect-python-package@v2.8.0
+      uses: hynek/build-and-inspect-python-package@b5076c307dc91924a82ad150cdd1533b444d3310
       with:
         attest-build-provenance-github: 'true'
 
@@ -46,6 +46,8 @@ jobs:
       contents: write
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: true
 
     - name: Download Package
       uses: actions/download-artifact@v4
@@ -54,14 +56,18 @@ jobs:
         path: dist
 
     - name: Publish package to PyPI
-      uses: pypa/gh-action-pypi-publish@v1.9.0
+      uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc
+      with:
+        attestations: true
 
     - name: Push tag
+      env:
+          VERSION: ${{ github.event.inputs.version }}
       run: |
         git config user.name "pytest bot"
         git config user.email "pytestbot@gmail.com"
-        git tag --annotate --message=v${{ github.event.inputs.version }} ${{ github.event.inputs.version }} ${{ github.sha }}
-        git push origin ${{ github.event.inputs.version }}
+        git tag --annotate --message=v"$VERSION" "$VERSION" ${{ github.sha }}
+        git push origin "$VERSION"
 
   release-notes:
 
@@ -96,12 +102,14 @@ jobs:
         pip install --upgrade tox
 
     - name: Generate release notes
+      env:
+        VERSION: ${{ github.event.inputs.version }}
       run: |
         sudo apt-get install pandoc
-        tox -e generate-gh-release-notes -- ${{ github.event.inputs.version }} scripts/latest-release-notes.md
+        tox -e generate-gh-release-notes -- "$VERSION" scripts/latest-release-notes.md
 
     - name: Publish GitHub Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
       with:
         body_path: scripts/latest-release-notes.md
         files: dist/*

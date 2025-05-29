@@ -2,17 +2,18 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import Callable
+from collections.abc import Iterable
+from collections.abc import Iterator
+from collections.abc import MutableMapping
 from functools import cached_property
+from functools import lru_cache
 from inspect import signature
 import os
 import pathlib
 from pathlib import Path
 from typing import Any
-from typing import Callable
 from typing import cast
-from typing import Iterable
-from typing import Iterator
-from typing import MutableMapping
 from typing import NoReturn
 from typing import overload
 from typing import TYPE_CHECKING
@@ -43,7 +44,7 @@ from _pytest.warning_types import PytestWarning
 
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 
     # Imported here due to circular import.
     from _pytest.main import Session
@@ -143,14 +144,14 @@ class Node(abc.ABC, metaclass=NodeMeta):
     # Use __slots__ to make attribute access faster.
     # Note that __dict__ is still available.
     __slots__ = (
-        "name",
-        "parent",
-        "config",
-        "session",
-        "path",
+        "__dict__",
         "_nodeid",
         "_store",
-        "__dict__",
+        "config",
+        "name",
+        "parent",
+        "path",
+        "session",
     )
 
     def __init__(
@@ -435,12 +436,12 @@ class Node(abc.ABC, metaclass=NodeMeta):
             else:
                 style = "long"
 
-        if self.config.getoption("verbose", 0) > 1:
+        if self.config.get_verbosity() > 1:
             truncate_locals = False
         else:
             truncate_locals = True
 
-        truncate_args = False if self.config.getoption("verbose", 0) > 2 else True
+        truncate_args = False if self.config.get_verbosity() > 2 else True
 
         # excinfo.getrepr() formats paths relative to the CWD if `abspath` is False.
         # It is possible for a fixture/test to change the CWD while this code runs, which
@@ -543,8 +544,11 @@ class Collector(Node, abc.ABC):
         return excinfo.traceback
 
 
-def _check_initialpaths_for_relpath(session: Session, path: Path) -> str | None:
-    for initial_path in session._initialpaths:
+@lru_cache(maxsize=1000)
+def _check_initialpaths_for_relpath(
+    initial_paths: frozenset[Path], path: Path
+) -> str | None:
+    for initial_path in initial_paths:
         if commonpath(path, initial_path) == initial_path:
             rel = str(path.relative_to(initial_path))
             return "" if rel == "." else rel
@@ -594,7 +598,7 @@ class FSCollector(Collector, abc.ABC):
             try:
                 nodeid = str(self.path.relative_to(session.config.rootpath))
             except ValueError:
-                nodeid = _check_initialpaths_for_relpath(session, path)
+                nodeid = _check_initialpaths_for_relpath(session._initialpaths, path)
 
             if nodeid and os.sep != SEP:
                 nodeid = nodeid.replace(os.sep, SEP)
